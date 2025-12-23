@@ -1,0 +1,53 @@
+name: CI-Build-Push
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/frontend/**'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials (OIDC Mode)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::671838581040:role/github-actions-role
+          aws-region: us-east-1
+
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, Tag, and Push Image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/microservices-demo/frontend:$IMAGE_TAG -f src/frontend/Dockerfile ./src/frontend
+          docker push $ECR_REGISTRY/microservices-demo/frontend:$IMAGE_TAG
+
+      - name: Update Manifest
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          git config --global user.email "action@github.com"
+          git config --global user.name "GitHub Action"
+          
+          git clone https://${{ secrets.GH_TOKEN }}@github.com/${{ github.repository_owner }}/eks-boutique-manifest.git manifest-dir
+          cd manifest-dir
+
+          sed -i "s|image: .*/frontend:.*|image: $ECR_REGISTRY/microservices-demo/frontend:$IMAGE_TAG|g" k8s-manifest/frontend.yaml
+          
+          git add .
+          git commit -m "chore: update frontend image to $IMAGE_TAG" || echo "No changes to commit"
+          git pull --rebase origin main
+          git push origin main
