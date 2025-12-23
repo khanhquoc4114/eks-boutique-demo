@@ -82,7 +82,7 @@ jobs:
           cd manifest-dir
 
           # Dùng biến $SERVICE để sửa đúng file tương ứng
-          sed -i "s|image: .*/$SERVICE:.*|image: $ECR_REGISTRY/microservices-demo/$SERVICE:$IMAGE_TAG|g" k8s-manifest/$SERVICE.yaml
+          sed -i "s|image:[[:space:]]*.*\/$SERVICE:.*|image: $ECR_REGISTRY/microservices-demo/$SERVICE:$IMAGE_TAG|g" k8s-manifest/$SERVICE.yaml
           
           git add .
           git commit -m "chore: update $SERVICE image to $IMAGE_TAG" || echo "No changes to commit"
