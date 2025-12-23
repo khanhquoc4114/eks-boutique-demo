@@ -1,0 +1,90 @@
+name: CI-CD-All-Services
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - '.github/workflows/**'
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.filter.outputs.changes }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend: 'src/frontend/**'
+            cartservice: 'src/cartservice/**'
+            checkoutservice: 'src/checkoutservice/**'
+            emailservice: 'src/emailservice/**'
+            paymentservice: 'src/paymentservice/**'
+            shippingservice: 'src/shippingservice/**'
+            adservice: 'src/adservice/**'
+            currencyservice: 'src/currencyservice/**'
+            productcatalogservice: 'src/productcatalogservice/**'
+            recommendationservice: 'src/recommendationservice/**'
+            loadgenerator: 'src/loadgenerator/**'
+
+  build-and-push:
+    needs: changes
+    if: ${{ needs.changes.outputs.services != '[]' }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: ${{ fromJson(needs.changes.outputs.services) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::671838581040:role/github-actions-role
+          aws-region: us-east-1
+
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, Tag, and Push Image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+          SERVICE: ${{ matrix.service }}
+        run: |
+          # Logic build linh hoạt cho cả cartservice (Dockerfile lồng bên trong)
+          DOCKERFILE="src/$SERVICE/Dockerfile"
+          if [ ! -f "$DOCKERFILE" ]; then
+            DOCKERFILE="src/$SERVICE/src/Dockerfile"
+          fi
+          
+          docker build -t $ECR_REGISTRY/microservices-demo/$SERVICE:$IMAGE_TAG -f $DOCKERFILE ./src/$SERVICE
+          docker push $ECR_REGISTRY/microservices-demo/$SERVICE:$IMAGE_TAG
+
+      - name: Update Manifest
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+          SERVICE: ${{ matrix.service }}
+        run: |
+          git config --global user.email "action@github.com"
+          git config --global user.name "GitHub Action"
+          
+          git clone https://${{ secrets.GH_TOKEN }}@github.com/${{ github.repository_owner }}/eks-boutique-manifest.git manifest-dir
+          cd manifest-dir
+
+          # Dùng biến $SERVICE để sửa đúng file tương ứng
+          sed -i "s|image: .*/$SERVICE:.*|image: $ECR_REGISTRY/microservices-demo/$SERVICE:$IMAGE_TAG|g" k8s-manifest/$SERVICE.yaml
+          
+          git add .
+          git commit -m "chore: update $SERVICE image to $IMAGE_TAG" || echo "No changes to commit"
+          git pull --rebase origin main
+          git push origin main
