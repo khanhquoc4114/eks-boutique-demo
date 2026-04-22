@@ -1,10 +1,8 @@
 #!/bin/bash
 
-# --- CẤU HÌNH ---
 AWS_REGION="us-east-1" 
 REPO_PREFIX="microservices-demo"
 
-# Danh sách đầy đủ các service trong Google Microservices Demo
 SERVICES=(
     "emailservice"
     "productcatalogservice"
@@ -19,13 +17,13 @@ SERVICES=(
     "loadgenerator"
 )
 
-echo ">>> Bắt đầu tạo ECR Repositories tại region: $AWS_REGION..."
+echo "Bat dau tao ECR repositories tai region: $AWS_REGION"
 
 for SERVICE in "${SERVICES[@]}"
 do
     REPO_NAME="${REPO_PREFIX}/${SERVICE}"
     
-    echo "--- Đang tạo repo: $REPO_NAME ---"
+    echo "Dang tao repo: $REPO_NAME"
     
     aws ecr create-repository \
         --repository-name "$REPO_NAME" \
@@ -34,10 +32,10 @@ do
         > /dev/null 2>&1
 
     if [ $? -eq 0 ]; then
-        echo "✅ Đã tạo xong: $REPO_NAME"
+        echo "Da tao: $REPO_NAME"
     else
-        echo "⚠️  Repo $REPO_NAME có thể đã tồn tại hoặc có lỗi xảy ra."
+        echo "Bo qua: $REPO_NAME (co the da ton tai hoac co loi)"
     fi
 done
 
-echo ">>> Hoàn tất! Ông kiểm tra lại trên Console nhé."
+echo "Hoan tat tao repositories."
